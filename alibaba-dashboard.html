@@ -686,6 +686,7 @@ tr.today td{background:rgba(240,165,0,.04)}
         <div style="height:11px;border-radius:6px;background:var(--bg2);border:1px solid var(--bdr);overflow:hidden">
           <div id="ov-goal-bar" style="height:100%;width:0%;background:var(--accent);border-radius:6px;transition:width .4s"></div>
         </div>
+        <div id="ov-forecast" style="margin-top:8px;font-size:12.5px;color:var(--t2)"></div>
       </div>
       <div id="ov-signals" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"></div>
       <div id="ov-fresh" style="margin-top:12px"></div>
@@ -789,6 +790,9 @@ tr.today td{background:rgba(240,165,0,.04)}
         <span>📡 Данные ниже — напрямую из iiko · <span id="mkti-gen" style="color:var(--t3)">загрузка…</span></span>
         <button onclick="refreshMkt()" style="padding:5px 12px;border:1px solid var(--bdr);background:var(--card);border-radius:8px;font-size:12px;font-weight:700;color:var(--t1);cursor:pointer">⟲ Обновить</button>
       </div>
+      <details class="fold" open><summary>💰 Прибыль по блюдам — что реально зарабатывает</summary><div class="fold-body">
+        <div class="tscroll"><table><thead><tr><th>Блюдо</th><th style="text-align:right">Прибыль</th><th style="text-align:right">Маржа</th><th style="text-align:right">Порций</th></tr></thead><tbody id="mkti-profit"></tbody></table></div>
+      </div></details>
       <details class="fold"><summary>🏆 Клиенты из iiko (по выручке)</summary><div class="fold-body">
         <div class="tscroll"><table><thead><tr><th>#</th><th>Телефон</th><th>Адрес</th><th style="text-align:right">Выручка</th><th style="text-align:right">Заказов</th><th style="text-align:right">Ср.чек</th></tr></thead><tbody id="mkti-clients"></tbody></table></div>
       </div></details>
@@ -1982,6 +1986,17 @@ function renderDirCockpit(){
   const prog=PROFIT_GOAL>0?Math.max(0,Math.min(100,tN/PROFIT_GOAL*100)):0;
   const bar=document.getElementById('ov-goal-bar');if(bar)bar.style.width=prog.toFixed(0)+'%';
   set('ov-goal-txt',`${fmt(tN)} / ${fmt(PROFIT_GOAL)} · ${prog.toFixed(0)}%`);
+  // прогноз конца месяца: «если темп сохранится» (по рабочим дням, вс — выходной)
+  (function(){
+    const el=document.getElementById('ov-forecast');if(!el)return;
+    const isCur=dirYr===new Date().getFullYear()&&dirMo===new Date().getMonth();
+    if(!isCur||ndSales<2){el.textContent='';return;}
+    const dim=new Date(dirYr,dirMo+1,0).getDate();
+    let workTot=0;for(let d2=1;d2<=dim;d2++){if(new Date(dirYr,dirMo,d2).getDay()!==0)workTot++;}
+    const fRev=tR/ndSales*workTot, fNet=tN/ndSales*workTot;
+    const hit=fNet>=PROFIT_GOAL;
+    el.innerHTML=`📉 Прогноз на конец месяца (если темп сохранится): оборот ~<b style="color:var(--t1)">${fmt(fRev)}</b> · чистая ~<b style="color:${fNet>=0?'var(--green)':'var(--red)'}">${fmt(fNet)}</b> ${hit?'🟢 цель достижима':'🟠 цель под угрозой — нужен темп '+fmt(Math.max(0,(PROFIT_GOAL-tN)/(workTot-ndSales)))+'/день чистыми'}`;
+  })();
   const sig=[];
   if(revToday>0&&cashToday===0)sig.push(['red','🔴 Касса не закрыта сегодня (нал = 0)']);
   else if(revToday>0)sig.push(['green','🟢 Касса закрыта']);
@@ -2307,6 +2322,20 @@ function renderMktIiko(){
   _setAll(['mkti-abc'],abcHtml);
   const abcHtmlM=abcV.map(x=>`<tr><td style="font-weight:600">${esc(x.name)}</td><td><span style="font-weight:800;color:${abcColor(x.cls)}">${x.cls}</span></td><td style="text-align:right">${x.qty}</td></tr>`).join('')||'<tr><td colspan="3" style="text-align:center;color:var(--t3);padding:16px">Нет продаж за период</td></tr>';
   _setAll(['mkti-abc-m'],abcHtmlM);
+  // 💰 прибыль по блюдам (весь период данных; поля profit из коннектора)
+  const pEl=document.getElementById('mkti-profit');
+  if(pEl){
+    const hasP=(d.abc||[]).some(x=>typeof x.profit==='number');
+    if(!hasP){pEl.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--t3);padding:14px">Обновите данные (⟲) — прибыль появится после ночного синка</td></tr>';}
+    else{
+      const byP=[...d.abc].sort((a,b)=>(b.profit||0)-(a.profit||0));
+      pEl.innerHTML=byP.map(x=>{
+        const mp=x.revenue>0?Math.round((x.profit||0)/x.revenue*100):0;
+        const neg=(x.profit||0)<0;
+        return `<tr${neg?' style="background:rgba(220,38,38,.07)"':''}><td style="font-weight:600">${esc(x.name)}</td><td style="text-align:right;font-weight:800;color:${neg?'var(--red)':'var(--green)'}">${fmt(x.profit||0)}</td><td style="text-align:right;color:${neg?'var(--red)':'var(--t2)'}">${x.revenue>0?mp+'%':'—'}</td><td style="text-align:right">${x.qty}</td></tr>`;
+      }).join('');
+    }
+  }
   const mx=Math.max(1,...portV.map(x=>x.portions));
   const portHtml=portV.length?'<div style="display:flex;align-items:flex-end;gap:4px;height:120px">'+portV.map(x=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%" title="${x.date}: ${x.portions} порций"><div style="font-size:9px;color:var(--t3)">${x.portions}</div><div style="width:100%;background:var(--accent);border-radius:3px 3px 0 0;height:${Math.round(x.portions/mx*88)}%;min-height:2px"></div><div style="font-size:8px;color:var(--t3);margin-top:2px">${fmtD(x.date).slice(0,5)}</div></div>`).join('')+'</div>':'<div class="empty">Нет данных за период</div>';
   _setAll(['mkti-portions','mkti-portions-m'],portHtml);
