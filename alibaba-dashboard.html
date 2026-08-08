@@ -645,6 +645,7 @@ tr.today td{background:rgba(240,165,0,.04)}
     <input type="password" class="linp" id="au-pass" placeholder="пароль" autocomplete="current-password" onkeydown="if(event.key==='Enter')authLogin()">
     <button class="lbtn" onclick="authLogin()">Войти →</button>
     <div class="lerr" id="lerr">Неверный email или пароль</div>
+    <button class="hbtn" style="margin:16px auto 0;display:flex" onclick="show('landing')">← Назад</button>
   </div>
 </div>
 
@@ -1253,7 +1254,7 @@ function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.re
 let dirAuthed=false;      // пароль введён на переходе к Директору (на сессию)
 let curMode='manager';
 function setMode(m){
-  if(m==='director' && !dirAuthed){ toast('🔒 Доступно только аккаунту директора'); return; }
+  if(m==='director' && !dirAuthed){ goLogin(); return; }   // вход директора на переходе (как раньше)
   curMode=m;
   const dir=m==='director';
   const gm=document.getElementById('grp-manager'), gd=document.getElementById('grp-director');
@@ -1316,7 +1317,7 @@ function saveRecon(date){
 }
 function goHR(){renderHR();show('hr');loadHR();}
 function goMkt(){renderClients();renderLeads();loadMktIiko();show('mkt')}
-function goLogin(){document.getElementById('lpw').value='';document.getElementById('lerr').style.display='none';show('login')}
+function goLogin(){const e=document.getElementById('au-email');if(e&&!e.value)e.value='director@alibaba.uz';const p=document.getElementById('au-pass');if(p)p.value='';const er=document.getElementById('lerr');if(er)er.style.display='none';show('login')}
 function goDir(){show('dir');dirRender()}
 
 // ════════════════════════════════════════
@@ -2463,11 +2464,21 @@ async function authLogin(){
     afterAuth();
   }catch(e){if(err){err.style.display='block';}}
 }
-function authLogout(){sessSave(null);location.reload();}
+function authLogout(){sessSave(null);location.reload();}   // после reload авто-вход менеджером
+async function autoLoginManager(){
+  // Ссылка открывается сразу (уровень менеджера). Директор — по паролю на переходе, как раньше.
+  try{
+    const r=await fetch(`${SUPA_URL}/auth/v1/token?grant_type=password`,{method:'POST',headers:{apikey:SUPA_PUB,'Content-Type':'application/json'},body:JSON.stringify({email:'manager@alibaba.uz',password:'Mgr-iOS4EQ4vMsTA'})});
+    const j=await r.json();
+    if(!j.access_token)throw 0;
+    sessSave({access_token:j.access_token,refresh_token:j.refresh_token,expires_at:Date.now()+((j.expires_in||3600)-120)*1000,role:'manager',email:'manager@alibaba.uz'});
+    afterAuth();
+  }catch(_){show('login');}
+}
 function afterAuth(){
   dirAuthed=(AB_SESS&&AB_SESS.role==='director');
   curMode=dirAuthed?'director':'manager';
-  const bd=document.getElementById('mt-dir');if(bd)bd.style.display=dirAuthed?'':'none';
+  const bd=document.getElementById('mt-dir');if(bd)bd.style.display='';
   show('landing');setMode(curMode);
 }
 setInterval(()=>{authEnsure();},10*60*1000);   // держим токен свежим
@@ -2593,8 +2604,8 @@ function importDailyReports(e){
   // Если авто-бэкапа ещё нет — создаём из текущей базы при первом запуске после апгрейда
   try{if(!localStorage.getItem(BACKUP_KEY))localStorage.setItem(BACKUP_KEY,localStorage.getItem(DB_KEY)||'')}catch(e){}
   sessLoad();
-  if(!AB_SESS){show('login');}
-  else{authEnsure().then(ok=>{ if(ok)afterAuth(); else show('login'); });}
+  if(!AB_SESS){autoLoginManager();}
+  else{authEnsure().then(ok=>{ if(ok)afterAuth(); else autoLoginManager(); });}
 })();
 </script>
 </body>
