@@ -436,6 +436,9 @@ tr.today td{background:rgba(240,165,0,.04)}
       <button id="mt-mgr" class="mt on" onclick="setMode('manager')">👨‍💼 Менеджер</button>
       <button id="mt-dir" class="mt" onclick="setMode('director')">🎯 Директор</button>
     </div>
+    <div style="text-align:center;margin:-14px 0 16px">
+      <button onclick="authLogout()" style="background:none;border:none;color:var(--t3);font-size:11.5px;cursor:pointer;text-decoration:underline">выйти из аккаунта</button>
+    </div>
   </div>
   <div class="roles-wrap">
     <div class="rgroup" id="grp-manager">
@@ -636,12 +639,12 @@ tr.today td{background:rgba(240,165,0,.04)}
 <div id="login" class="screen">
   <div class="lbox">
     <div class="licon">🔐</div>
-    <div class="ltitle">Директор</div>
-    <div class="lsub">Пароль для доступа к аналитике</div>
-    <input type="password" class="linp" id="lpw" placeholder="••••••••" onkeydown="if(event.key==='Enter')tryLogin()">
-    <button class="lbtn" onclick="tryLogin()">Войти →</button>
-    <div class="lerr" id="lerr">Неверный пароль</div>
-    <button class="hbtn" style="margin:16px auto 0;display:flex" onclick="goLanding()">← Назад</button>
+    <div class="ltitle">Ali Baba Dashboard</div>
+    <div class="lsub">Вход в аккаунт</div>
+    <input type="email" class="linp" id="au-email" placeholder="email" autocomplete="username" style="margin-bottom:10px">
+    <input type="password" class="linp" id="au-pass" placeholder="пароль" autocomplete="current-password" onkeydown="if(event.key==='Enter')authLogin()">
+    <button class="lbtn" onclick="authLogin()">Войти →</button>
+    <div class="lerr" id="lerr">Неверный email или пароль</div>
   </div>
 </div>
 
@@ -1250,7 +1253,7 @@ function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.re
 let dirAuthed=false;      // пароль введён на переходе к Директору (на сессию)
 let curMode='manager';
 function setMode(m){
-  if(m==='director' && !dirAuthed){ goLogin(); return; }   // пароль на окне перехода
+  if(m==='director' && !dirAuthed){ toast('🔒 Доступно только аккаунту директора'); return; }
   curMode=m;
   const dir=m==='director';
   const gm=document.getElementById('grp-manager'), gd=document.getElementById('grp-director');
@@ -1340,7 +1343,7 @@ function tSync(t){tPost({action:'upsert',task:{id:t.id,owner:t.owner,title:t.tit
 async function loadTasks(){
   if(_tasksLoading)return;_tasksLoading=true;
   try{
-    const r=await fetch(`${SUPA_URL}/rest/v1/tasks?select=*&order=created_at.asc`,{headers:{apikey:SUPA_PUB,Authorization:'Bearer '+SUPA_PUB}});
+    const r=await fetch(`${SUPA_URL}/rest/v1/tasks?select=*&order=created_at.asc`,{headers:authH()});
     const rows=await r.json();const d=taskStore();
     if(Array.isArray(rows)){
       if(!rows.length && d.tasks.length){
@@ -1444,9 +1447,9 @@ async function hrPost(body){try{const r=await fetch(HR_URL,{method:'POST',header
 async function loadHR(){
   if(_hrLoading)return;_hrLoading=true;
   try{
-    const H={apikey:SUPA_PUB,Authorization:'Bearer '+SUPA_PUB};
+    const H=authH();
     const [er,sr]=await Promise.all([
-      fetch(`${SUPA_URL}/rest/v1/hr_employees?select=*`,{headers:H}),
+      fetch(`${SUPA_URL}/rest/v1/${(AB_SESS&&AB_SESS.role==='manager')?'hr_employees_safe':'hr_employees'}?select=*`,{headers:H}),
       fetch(`${SUPA_URL}/rest/v1/hr_schedule?select=*`,{headers:H})
     ]);
     const emps=await er.json(),sch=await sr.json();const d=_hr();
@@ -1490,7 +1493,7 @@ async function onFinDate(){
   document.getElementById('f-date-lbl').textContent=date===t?'Сегодня':d.toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long'});
   Object.values(DX_MAP).forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   try{
-    const r=await fetch(`${SUPA_URL}/rest/v1/opex?select=category,amount&note=eq.manual&date=eq.${date}`,{headers:{apikey:SUPA_PUB,Authorization:'Bearer '+SUPA_PUB}});
+    const r=await fetch(`${SUPA_URL}/rest/v1/opex?select=category,amount&note=eq.manual&date=eq.${date}`,{headers:authH()});
     (await r.json()||[]).forEach(x=>{const id=DX_MAP[x.category];if(id)sv(id,x.amount||'');});
   }catch(_){}
   sv('fc-actual',(dbGet().recon||{})[date]||'');reconHint();dxCalc();renderFinHist();
@@ -1957,7 +1960,7 @@ function renderDirCockpit(){
     const put=v=>{const el=document.getElementById('ov-rev-sub');if(el&&v!=null){const pct=tR>0&&v>0?((tR-v)/v*100):null;
       if(pct!=null)el.textContent+=` · ${pct>=0?'▲':'▼'}${Math.abs(pct).toFixed(0)}% vs ${MO[pm]}`;}};
     if(window._pmCacheKey===ck){put(window._pmCacheVal);return;}
-    fetch(`${SUPA_URL}/rest/v1/daily_sales?select=revenue_total&date=gte.${pf}&date=lte.${pt}`,{headers:{apikey:SUPA_PUB,Authorization:'Bearer '+SUPA_PUB}})
+    fetch(`${SUPA_URL}/rest/v1/daily_sales?select=revenue_total&date=gte.${pf}&date=lte.${pt}`,{headers:authH()})
       .then(r=>r.json()).then(rows=>{const v=(Array.isArray(rows)?rows:[]).reduce((s,x)=>s+(x.revenue_total||0),0);
         window._pmCacheKey=ck;window._pmCacheVal=v;put(v);}).catch(()=>{});
   })();
@@ -2425,17 +2428,61 @@ function doExport(){
 const UZUM_COMMISSION=0.29; // комиссия агрегатора Uzum: в выручку идёт net = ×(1−0.29)
 const SUPA_URL='https://jcudeucdlskrrpfkagps.supabase.co';
 const SUPA_PUB='sb_publishable_rT_yKB-LpDft4S_ujhQwSw__zc-v6G-'; // публичный ключ — только SELECT (RLS)
+// ── АВТОРИЗАЦИЯ (Supabase Auth): сессия, роль, заголовки ──
+let AB_SESS=null;
+function sessLoad(){try{AB_SESS=JSON.parse(localStorage.getItem('ab_session'))||null}catch(_){AB_SESS=null}}
+function sessSave(x){AB_SESS=x;try{x?localStorage.setItem('ab_session',JSON.stringify(x)):localStorage.removeItem('ab_session')}catch(_){}}
+function authH(){return {apikey:SUPA_PUB,Authorization:'Bearer '+(AB_SESS&&AB_SESS.access_token?AB_SESS.access_token:SUPA_PUB)};}
+async function authRefresh(){
+  if(!AB_SESS||!AB_SESS.refresh_token)return false;
+  try{
+    const r=await fetch(`${SUPA_URL}/auth/v1/token?grant_type=refresh_token`,{method:'POST',headers:{apikey:SUPA_PUB,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:AB_SESS.refresh_token})});
+    const j=await r.json();
+    if(j.access_token){sessSave(Object.assign({},AB_SESS,{access_token:j.access_token,refresh_token:j.refresh_token||AB_SESS.refresh_token,expires_at:Date.now()+((j.expires_in||3600)-120)*1000}));return true;}
+  }catch(_){}
+  return false;
+}
+async function authEnsure(){
+  if(!AB_SESS)return false;
+  if(Date.now()<(AB_SESS.expires_at||0))return true;
+  const ok=await authRefresh();
+  if(!ok){sessSave(null);show('login');}
+  return ok;
+}
+async function authLogin(){
+  const em=(document.getElementById('au-email')||{}).value||'', pw=(document.getElementById('au-pass')||{}).value||'';
+  const err=document.getElementById('lerr');if(err)err.style.display='none';
+  try{
+    const r=await fetch(`${SUPA_URL}/auth/v1/token?grant_type=password`,{method:'POST',headers:{apikey:SUPA_PUB,'Content-Type':'application/json'},body:JSON.stringify({email:em.trim(),password:pw})});
+    const j=await r.json();
+    if(!j.access_token)throw new Error(j.error_description||j.msg||'нет доступа');
+    const pr=await fetch(`${SUPA_URL}/rest/v1/profiles?select=role,name`,{headers:{apikey:SUPA_PUB,Authorization:'Bearer '+j.access_token}});
+    const pj=await pr.json();
+    const role=(Array.isArray(pj)&&pj[0]&&pj[0].role)||'manager';
+    sessSave({access_token:j.access_token,refresh_token:j.refresh_token,expires_at:Date.now()+((j.expires_in||3600)-120)*1000,role,email:em.trim()});
+    afterAuth();
+  }catch(e){if(err){err.style.display='block';}}
+}
+function authLogout(){sessSave(null);location.reload();}
+function afterAuth(){
+  dirAuthed=(AB_SESS&&AB_SESS.role==='director');
+  curMode=dirAuthed?'director':'manager';
+  const bd=document.getElementById('mt-dir');if(bd)bd.style.display=dirAuthed?'':'none';
+  show('landing');setMode(curMode);
+}
+setInterval(()=>{authEnsure();},10*60*1000);   // держим токен свежим
+
 let _iikoSynced=null; // 'YYYY-M' уже синхронизированного месяца
 async function syncIikoPeriod(frm,to){   // frm вкл., to искл.
   const url=`${SUPA_URL}/rest/v1/daily_sales?select=*&date=gte.${frm}&date=lt.${to}&order=date.asc`;
-  const r=await fetch(url,{headers:{apikey:SUPA_PUB,Authorization:'Bearer '+SUPA_PUB}});
+  const r=await fetch(url,{headers:authH()});
   if(!r.ok)throw new Error('HTTP '+r.status);
   const rows=await r.json();
   if(!Array.isArray(rows))return 0;
   try{window._salesUpd=rows.reduce((m,x)=>x.updated_at>m?x.updated_at:m,window._salesUpd||'');}catch(_){}
   // расходы из iiko (таблица opex) — храним по дням, чтобы фильтровать любым периодом
   try{
-    const er=await fetch(`${SUPA_URL}/rest/v1/opex?select=date,category,amount,note&date=gte.${frm}&date=lt.${to}`,{headers:{apikey:SUPA_PUB,Authorization:'Bearer '+SUPA_PUB}});
+    const er=await fetch(`${SUPA_URL}/rest/v1/opex?select=date,category,amount,note&date=gte.${frm}&date=lt.${to}`,{headers:authH()});
     const exp=await er.json();window._opexRows=window._opexRows||{};
     (Array.isArray(exp)?exp:[]).forEach(x=>{window._opexRows[x.date+'|'+x.category]={date:x.date,category:x.category,amount:x.amount||0,note:x.note||''};});
   }catch(_){}
@@ -2545,7 +2592,9 @@ function importDailyReports(e){
   dbSave(d);
   // Если авто-бэкапа ещё нет — создаём из текущей базы при первом запуске после апгрейда
   try{if(!localStorage.getItem(BACKUP_KEY))localStorage.setItem(BACKUP_KEY,localStorage.getItem(DB_KEY)||'')}catch(e){}
-  show('landing');
+  sessLoad();
+  if(!AB_SESS){show('login');}
+  else{authEnsure().then(ok=>{ if(ok)afterAuth(); else show('login'); });}
 })();
 </script>
 </body>
