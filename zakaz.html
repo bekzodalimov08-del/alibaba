@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Ali Baba — заказ</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23F6B500'/%3E%3C/svg%3E">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,'Segoe UI',Roboto,sans-serif}
+body{background:#f4f6fa;color:#16233a;padding-bottom:120px}
+.hdr{background:#fff;padding:16px 18px;position:sticky;top:0;z-index:5;box-shadow:0 1px 8px rgba(0,0,0,.06);display:flex;align-items:center;gap:10px}
+.logo{width:34px;height:34px;border-radius:9px;background:#f0a500;display:flex;align-items:center;justify-content:center;font-weight:900;color:#161616}
+h1{font-size:17px}
+.sub{font-size:11.5px;color:#7a8699}
+.wrap{max-width:560px;margin:0 auto;padding:14px}
+.item{background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:10px;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.nm{flex:1;font-weight:700;font-size:14.5px}
+.pr{color:#7a8699;font-size:12.5px;margin-top:2px}
+.stp{display:flex;align-items:center;gap:10px}
+.stp button{width:36px;height:36px;border-radius:10px;border:none;background:#eef1f6;font-size:20px;font-weight:800;color:#16233a}
+.stp .q{min-width:22px;text-align:center;font-weight:800;font-size:16px}
+.stp button.plus{background:#f0a500;color:#161616}
+.form{background:#fff;border-radius:14px;padding:16px;margin-top:16px;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.form label{font-size:11.5px;font-weight:800;color:#7a8699;text-transform:uppercase;letter-spacing:.5px;display:block;margin:12px 0 5px}
+.form input,.form textarea{width:100%;padding:12px 14px;border:1.5px solid #e3e8f0;border-radius:10px;font-size:15px;background:#fafbfd}
+.bar{position:fixed;left:0;right:0;bottom:0;background:#fff;padding:12px 16px calc(12px + env(safe-area-inset-bottom));box-shadow:0 -2px 14px rgba(0,0,0,.09)}
+.bar .in{max-width:560px;margin:0 auto;display:flex;align-items:center;gap:12px}
+.tot{flex:1}.tot .l{font-size:11px;color:#7a8699;font-weight:700}.tot .v{font-size:19px;font-weight:900}
+.send{background:linear-gradient(135deg,#f0a500,#fb923c);border:none;color:#161616;font-weight:900;font-size:15px;padding:14px 26px;border-radius:12px}
+.send:disabled{opacity:.4}
+.ok{max-width:560px;margin:60px auto;text-align:center;padding:20px;display:none}
+.ok .big{font-size:52px}.ok h2{margin:12px 0 6px}.ok p{color:#7a8699;font-size:14px;line-height:1.6}
+</style></head>
+<body>
+<div class="hdr"><div class="logo">AB</div><div><h1>Ali Baba — заказ</h1><div class="sub">Прямой заказ · дешевле, чем на Uzum · оплата перечислением или при получении</div></div></div>
+<div class="wrap" id="menu-wrap"></div>
+<div class="wrap form" id="form">
+  <label>Телефон *</label><input id="f-phone" type="tel" placeholder="+998 90 123 45 67">
+  <label>Компания / имя</label><input id="f-name" placeholder="Uzbektelecom / Азиз">
+  <label>Комментарий (адрес, время)</label><textarea id="f-comment" rows="2" placeholder="Чиланзар 5, к 12:30"></textarea>
+</div>
+<div class="bar" id="bar"><div class="in">
+  <div class="tot"><div class="l">ИТОГО</div><div class="v" id="t-sum">0 сум</div></div>
+  <button class="send" id="btn" onclick="send()" disabled>Заказать</button>
+</div></div>
+<div class="ok" id="ok"><div class="big">✅</div><h2>Заказ принят!</h2><p>Мы получили ваш заказ и уже начали собирать.<br>Менеджер свяжется для подтверждения.<br><br>Спасибо, что заказываете напрямую! 🧡</p></div>
+<script>
+const MENU=[{"name": "Бифштекс сет", "price": 40000}, {"name": "Картошка с Курицей сет", "price": 37000}, {"name": "Кур. Отбивной сет", "price": 37500}, {"name": "Кисло Сладкий сет", "price": 36500}, {"name": "Кур.Макарон Сыром сет", "price": 36000}, {"name": "Сальса сет", "price": 35500}, {"name": "Люля - Кебаб сет", "price": 38500}, {"name": "Панировка сет", "price": 37000}, {"name": "Котлета с сыром сет", "price": 39000}, {"name": "Жаренный Лагман сет", "price": 45000}, {"name": "Киевский сет", "price": 39000}, {"name": "Рубленный котлет сет", "price": 39500}];
+const TASKS_URL='https://jcudeucdlskrrpfkagps.supabase.co/functions/v1/tasks';
+const cart={};
+function fmt(n){return n.toLocaleString('ru-RU')+' сум'}
+function render(){
+  document.getElementById('menu-wrap').innerHTML=MENU.map((m,i)=>`
+    <div class="item"><div><div class="nm">${m.name}</div><div class="pr">${fmt(m.price)}</div></div>
+    <div class="stp"><button onclick="chg(${i},-1)">−</button><span class="q">${cart[i]||0}</span><button class="plus" onclick="chg(${i},1)">+</button></div></div>`).join('');
+  const sum=Object.entries(cart).reduce((s,kv)=>s+MENU[kv[0]].price*kv[1],0);
+  document.getElementById('t-sum').textContent=fmt(sum);
+  document.getElementById('btn').disabled=sum===0;
+}
+function chg(i,d){cart[i]=Math.max(0,(cart[i]||0)+d);if(!cart[i])delete cart[i];render();}
+async function send(){
+  const phone=document.getElementById('f-phone').value.trim();
+  if(phone.replace(/[^0-9]/g,'').length<7){alert('Укажите телефон');return;}
+  const items=Object.entries(cart).map(kv=>({name:MENU[kv[0]].name,price:MENU[kv[0]].price,qty:kv[1]}));
+  const total=items.reduce((s,x)=>s+x.price*x.qty,0);
+  const name=document.getElementById('f-name').value.trim();
+  const comment=document.getElementById('f-comment').value.trim();
+  const title='🛒 '+fmt(total)+' · '+phone+(name?' · '+name:'');
+  const body={action:'add',task:{owner:'ali',title:title,
+    comment:JSON.stringify({items,total,phone,name,comment,source:'webapp'})}};
+  document.getElementById('btn').disabled=true;
+  try{
+    const r=await fetch(TASKS_URL,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+    const j=await r.json();
+    if(!j.ok)throw new Error(j.error||'ошибка');
+    document.getElementById('menu-wrap').style.display='none';
+    document.getElementById('form').style.display='none';
+    document.getElementById('bar').style.display='none';
+    document.getElementById('ok').style.display='block';
+    window.scrollTo(0,0);
+  }catch(e){alert('Не удалось отправить: '+e.message+'. Позвоните нам, пожалуйста.');document.getElementById('btn').disabled=false;}
+}
+render();
+</script>
+</body></html>
