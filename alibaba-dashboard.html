@@ -2031,7 +2031,7 @@ function renderDirCockpit(){
   const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
   set('ov-rev',fmt(tR));
   const openShift=(te&&t===te.date&&new Date().getHours()<23)?' · смена открыта':'';
-  set('ov-rev-sub',`сегодня ${fmt(revToday)}${openShift} · чек ${fmt(avgChk)}`);
+  set('ov-rev-sub',`сегодня ${fmt(revToday)}${openShift} · ${oc} чек. · ср.чек ${fmt(avgChk)}`);
   // сравнение с прошлым месяцем к этой же дате (лёгкий запрос, кэш на месяц)
   (function(){
     const dNow=new Date();const dom=dirYr===dNow.getFullYear()&&dirMo===dNow.getMonth()?dNow.getDate():31;
@@ -2594,7 +2594,7 @@ async function syncIikoPeriod(frm,to){   // frm вкл., to искл.
     e.debt=Math.max(0, rev-cash-trans-cardNet-uzNet);  // продано в долг (тип «Задолженность» в iiko)
     // себестоимость и заказы из iiko (ручные закупки не трогаем — их перекрывает iikoCost)
     e.iikoCost=row.food_cost||0;
-    e.orders=row.orders_count||0;
+    e.orders=row.checks||row.orders_count||0;   // чеки как в iikoWeb (net>0) — средний чек 1:1 с iiko
     e.source='iiko';
     e.deleted=false;
   });
