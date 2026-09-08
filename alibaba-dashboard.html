@@ -361,6 +361,7 @@ tr.today td{background:rgba(240,165,0,.04)}
 .pd.w{background:var(--g2);color:var(--green);border-color:rgba(5,150,105,.45)}
 .pd.o{background:rgba(220,38,38,.14);color:var(--red);border-color:rgba(220,38,38,.4)}
 .pd.empty{background:transparent;border:none;cursor:default}
+.pd.off{background:var(--bg2);color:var(--t3);border-style:dashed;cursor:default;opacity:.65}
 /* ═══ Фильтр по датам ═══ */
 .date-filter{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px;padding:10px 14px;background:var(--card);border:1px solid var(--bdr);border-radius:var(--rr)}
 .date-filter .df-lbl{font-weight:800;font-size:11px;color:var(--t2);text-transform:uppercase;letter-spacing:.6px}
@@ -906,9 +907,19 @@ tr.today td{background:rgba(240,165,0,.04)}
     <div class="mtitle" id="m-emp-title">Добавить сотрудника</div>
     <input type="hidden" id="m-emp-id">
     <div class="mrow"><div class="mlbl">Имя и Фамилия</div><input class="minp" id="m-emp-name" placeholder="Алишер Каримов"></div>
-    <div class="mrow"><div class="mlbl">Должность</div><input class="minp" id="m-emp-pos" placeholder="Курьер"></div>
+    <div class="mrow"><div class="mlbl">Должность</div>
+      <select class="msel" id="m-emp-pos">
+        <option value="Повар">Повар</option><option value="Старший повар">Старший повар</option>
+        <option value="Упаковщик">Упаковщик</option><option value="Техничка">Техничка</option>
+        <option value="Снабженец">Снабженец</option><option value="Оператор">Оператор</option>
+        <option value="Администратор">Администратор</option></select></div>
     <div class="mrow"><div class="mlbl">Телефон</div><input class="minp" id="m-emp-phone" placeholder="+998 90 000 00 00"></div>
-    <div class="mrow" id="m-emp-rate-row"><div class="mlbl">Ставка в день (сум)</div><input type="number" class="minp" id="m-emp-rate" placeholder="50000"></div>
+    <div class="mrow" id="m-emp-rate-row"><div class="mlbl">Ставка в день, в штате (сум)</div><input type="number" class="minp" id="m-emp-rate" placeholder="150000"></div>
+    <div class="mrow" id="m-emp-intern-row"><div class="mlbl">Оформление</div>
+      <select class="msel" id="m-emp-intern">
+        <option value="regular">Стажёр — обычный (100 000/д, 3 дня)</option>
+        <option value="kitchen">Стажёр — кухня (150 000/д, 3 дня)</option>
+        <option value="">В штате (без стажировки)</option></select></div>
     <div class="mrow"><div class="mlbl">Дата найма</div><input type="date" class="minp" id="m-emp-hire"></div>
     <div class="mrow"><div class="mlbl">Статус</div>
       <select class="msel" id="m-emp-status"><option value="active">Активен</option><option value="inactive">Уволен</option></select></div>
@@ -1545,7 +1556,7 @@ async function loadHR(){
       }}
     }else{
       // принимаем облако как источник истины
-      if(Array.isArray(emps))d.hr.employees=emps.map(e=>({id:e.id,name:e.name,position:e.position||'',phone:e.phone||'',rate:e.rate||0,status:e.status||'active',hireDate:e.hire_date||''}));
+      if(Array.isArray(emps))d.hr.employees=emps.map(e=>({id:e.id,name:e.name,position:e.position||'',phone:e.phone||'',rate:e.rate||0,status:e.status||'active',hireDate:e.hire_date||'',internKind:e.intern_kind||''}));
       d.hr.sched={};d.hr.adv={};
       if(Array.isArray(sch))sch.forEach(row=>{
         d.hr.sched[row.month]=d.hr.sched[row.month]||{};d.hr.sched[row.month][row.emp_id]={};
@@ -1647,13 +1658,17 @@ function renderEmpCards(targetId){
   const all=empAll();
   if(!all.length){g.innerHTML='<div class="empty" style="grid-column:1/-1">Нет сотрудников. Нажмите «+ Добавить сотрудника»</div>';return}
   g.innerHTML=all.map(e=>{
-    const monthly=(e.rate||0)*26;const isActive=e.status==='active';
+    const monthly=(e.rate||0)*26;const isActive=e.status==='active';const ist=internStatus(e);
+    const statusBdg=ist&&!ist.done
+      ?`<span class="bdg" style="background:rgba(234,88,12,.15);color:var(--orange)">Стажёр ${ist.worked}/3</span>`
+      :`<span class="bdg ${isActive?'bdg-green':'bdg-gray'}">${isActive?'Активен':'Уволен'}</span>`;
     return`<div class="emp-card">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px">
         <div class="emp-name">${esc(e.name)}</div>
-        <span class="bdg ${isActive?'bdg-green':'bdg-gray'}">${isActive?'Активен':'Уволен'}</span>
+        ${statusBdg}
       </div>
       <div class="emp-pos">${esc(e.position)||'—'}</div>
+      ${ist&&!ist.done?`<div style="color:var(--orange);font-size:11px;margin:2px 0 4px">стажировка: ${fmt(internRateOf(e))}/д × 3 смены, далее в штат</div>`:''}
       <div class="emp-sal">
         <div class="emp-sal-item"><div class="slbl">Ставка/день</div><div class="sval">${fmt(e.rate)}</div></div>
         <div class="emp-sal-item"><div class="slbl">Месяц (26д)</div><div class="sval">${fmt(monthly)}</div></div>
@@ -1670,8 +1685,14 @@ function openEmpModal(id){
   const e=id?empAll().find(x=>x.id===id):null;
   document.getElementById('m-emp-title').textContent=e?'Редактировать сотрудника':'Добавить сотрудника';
   document.getElementById('m-emp-id').value=e?.id||'';
-  sv('m-emp-name',e?.name);sv('m-emp-pos',e?.position);sv('m-emp-phone',e?.phone);
-  sv('m-emp-rate',e?.rate);sv('m-emp-hire',e?.hireDate);
+  sv('m-emp-name',e?.name);sv('m-emp-phone',e?.phone);
+  sv('m-emp-rate',e?.rate);
+  const posSel=document.getElementById('m-emp-pos');
+  if(posSel){const pv=e?.position||'Повар';
+    if(pv&&![...posSel.options].some(o=>o.value===pv))posSel.add(new Option(pv,pv));
+    posSel.value=pv;}
+  document.getElementById('m-emp-intern').value=e?(e.internKind||''):'regular';
+  sv('m-emp-hire',e?.hireDate||today());
   const rr=document.getElementById('m-emp-rate-row'); if(rr) rr.style.display=dirAuthed?'':'none';
   document.getElementById('m-emp-status').value=e?.status||'active';
   openModal('m-emp');
@@ -1682,6 +1703,7 @@ function saveEmployee(){
   if(!name){toast('Введите имя',false);return}
   empSave({id,name,position:document.getElementById('m-emp-pos').value,phone:document.getElementById('m-emp-phone').value,
     rate:parseFloat(document.getElementById('m-emp-rate').value)||0,
+    internKind:document.getElementById('m-emp-intern').value||'',
     hireDate:document.getElementById('m-emp-hire').value,status:document.getElementById('m-emp-status').value});
   closeModal('m-emp');renderDirHR();toast('✓ Сотрудник сохранён');
 }
@@ -1712,7 +1734,8 @@ function renderHrPayrollSummary(targetId,money){
   if(!money){
     // менеджер — только выходы/невыходы, БЕЗ денег
     const rows=emps.map(e=>{const days=empDays(mv,e.id,n),miss=empMiss(mv,e.id,n).red;
-      return `<tr><td style="font-weight:600">${esc(e.name)}</td><td style="text-align:right;color:var(--green)">${days}</td><td style="text-align:right;color:${miss?'var(--red)':'var(--t3)'};font-weight:${miss?'800':'400'}">${miss}</td></tr>`;}).join('');
+      const ist=internStatus(e);const nm=esc(e.name)+(ist&&!ist.done?` <span style="font-size:9px;color:var(--orange);font-weight:800">СТАЖЁР ${ist.worked}/3</span>`:'');
+      return `<tr><td style="font-weight:600">${nm}</td><td style="text-align:right;color:var(--green)">${days}</td><td style="text-align:right;color:${miss?'var(--red)':'var(--t3)'};font-weight:${miss?'800':'400'}">${miss}</td></tr>`;}).join('');
     el.innerHTML=`<div class="tcard" style="margin-bottom:14px">
       <div class="tcard-top"><div class="tcard-title">🗓 График ${mLbl} ${yr} ${nav} · суммы видит директор</div></div>
       <div class="tscroll"><table><thead><tr><th>Сотрудник</th><th style="text-align:right">Вышел</th><th style="text-align:right">Не вышел</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
@@ -1721,13 +1744,16 @@ function renderHrPayrollSummary(targetId,money){
   // директор — полный расчёт зарплат + аванс (за паролём)
   let totPay=0,totFot=0;
   const rows=emps.map(e=>{
-    const r=e.rate||0,days=empDays(mv,e.id,n),miss=empMiss(mv,e.id,n).red,adv=empAdv(mv,e.id);
-    const earned=Math.round(r*(n-miss)),pay=earned-adv;totPay+=pay;totFot+=earned;
+    const s=empSalary(mv,e,n),adv=empAdv(mv,e.id);
+    const earned=s.fot,pay=earned-adv;totPay+=pay;totFot+=earned;
+    const ist=internStatus(e);
+    const nameCell=esc(e.name)+(ist&&!ist.done?` <span style="font-size:10px;color:var(--orange);font-weight:800">СТАЖЁР ${ist.worked}/3</span>`:'');
+    const rateCell=s.internDays?`<span style="font-size:11px">${fmt(s.internRate)}×${s.internDays} + ${fmt(s.permRate)}</span>`:fmt(s.permRate);
     return `<tr>
-      <td style="font-weight:600">${esc(e.name)}</td>
-      <td style="text-align:right;color:var(--t2)">${fmt(r)}</td>
-      <td style="text-align:right;color:var(--green)">${days}</td>
-      <td style="text-align:right;color:${miss?'var(--red)':'var(--t3)'};font-weight:${miss?'800':'400'}">${miss}</td>
+      <td style="font-weight:600">${nameCell}</td>
+      <td style="text-align:right;color:var(--t2)">${rateCell}</td>
+      <td style="text-align:right;color:var(--green)">${s.work}</td>
+      <td style="text-align:right;color:${s.abs?'var(--red)':'var(--t3)'};font-weight:${s.abs?'800':'400'}">${s.abs}</td>
       <td style="text-align:right"><input type="number" value="${adv||''}" placeholder="0" onchange="setAdv('${e.id}',this.value,'${mv}')" style="width:100px;padding:5px 8px;border-radius:7px;border:1px solid var(--bdr);background:var(--card);font-size:12.5px;color:var(--t1);text-align:right"></td>
       <td style="text-align:right;font-weight:800;color:var(--green)">${fmt(pay)}</td></tr>`;
   }).join('');
@@ -1755,11 +1781,39 @@ function payMonthInfo(){
 }
 function _hr(){const d=dbGet();d.hr=d.hr||{};d.hr.sched=d.hr.sched||{};d.hr.adv=d.hr.adv||{};return d;}
 function dayVal(mv,id,day){const s=((dbGet().hr.sched||{})[mv]||{})[id]||{};return (day in s)?(s[day]?1:0):1;} // по умолчанию вышел
-function empDays(mv,id,n){let t=0;for(let d=1;d<=n;d++)t+=dayVal(mv,id,d);return t;}
-function empMiss(mv,id,n){let red=0;for(let d=1;d<=n;d++)if(dayVal(mv,id,d)===0)red++;return {red,missedEq:red};}
+function moDays(mv){const p=mv.split('-').map(Number);return new Date(p[0],p[1],0).getDate();}
+function isWorkDay(mv,day){const p=mv.split('-').map(Number);return new Date(p[0],p[1]-1,day).getDay()!==0;} // Вс — выходной (график 6-1, ресторан закрыт)
+function empDays(mv,id,n){n=n||moDays(mv);let t=0;for(let d=1;d<=n;d++)if(isWorkDay(mv,d)&&dayVal(mv,id,d)===1)t++;return t;}   // отработанные смены (Пн-Сб без невыходов)
+function empMiss(mv,id,n){n=n||moDays(mv);let red=0;for(let d=1;d<=n;d++)if(isWorkDay(mv,d)&&dayVal(mv,id,d)===0)red++;return {red,missedEq:red};} // невыходы (только рабочие дни)
 function empAdv(mv,id){return (((dbGet().hr.adv||{})[mv])||{})[id]||0;}
-function toggleDay(id,day){
+function internRateOf(e){return e&&e.internKind?(e.internKind==='kitchen'?150000:100000):0;}
+// расчёт начисления за месяц: первые 3 отработанные смены месяца найма — по стажёрской ставке, далее по штатной
+function empSalary(mv,e,n){
+  n=n||moDays(mv);
+  const work=empDays(mv,e.id,n),abs=empMiss(mv,e.id,n).red,permRate=e.rate||0;
+  let internDays=0;const internRate=internRateOf(e);
+  if(e.internKind&&e.hireDate&&e.hireDate.slice(0,7)===mv)internDays=Math.min(3,work);
+  const fot=internDays*internRate+(work-internDays)*permRate;
+  return {work,abs,internDays,internRate,permRate,fot,pay:fot};
+}
+// статус стажировки (динамически): «в штате» после 3 отработанных смен месяца найма
+function internStatus(e){
+  if(!e.internKind||!e.hireDate)return null;
+  const worked=empDays(e.hireDate.slice(0,7),e.id);
+  return worked>=3?{done:true,worked}:{done:false,worked,left:3-worked,rate:internRateOf(e)};
+}
+function fill61(id){
   const mv=document.getElementById('m-pay-month').value;const d=_hr();
+  d.hr.sched[mv]=d.hr.sched[mv]||{};d.hr.sched[mv][id]={};   // очистить невыходы → все Пн-Сб вышел, Вс выходной
+  try{localStorage.setItem(DB_KEY,JSON.stringify(d))}catch(_){}
+  hrPost({action:'month_fill',month:mv,emp_id:id});
+  _iikoSynced=null;renderPayCal();renderPayrollPanels();
+  toast('✓ Месяц заполнен по графику 6-1',true);
+}
+function toggleDay(id,day){
+  const mv=document.getElementById('m-pay-month').value;
+  if(!isWorkDay(mv,day))return;   // воскресенье — выходной, не переключаем
+  const d=_hr();
   d.hr.sched[mv]=d.hr.sched[mv]||{};d.hr.sched[mv][id]=d.hr.sched[mv][id]||{};
   const cur=(day in d.hr.sched[mv][id])?(d.hr.sched[mv][id][day]?1:0):1;
   const nv=cur===1?0:1;   // вышел ↔ не вышел
@@ -1791,10 +1845,18 @@ function renderPayCal(){
   const head=WDH.map((w,i)=>`<div class="pcal-hd${i>=5?' we':''}">${w}</div>`).join('');
   const offset=(new Date(yr,mo-1,1).getDay()+6)%7;   // сдвиг: неделя с понедельника
   let cells='';for(let i=0;i<offset;i++)cells+='<div class="pd empty"></div>';
-  for(let day=1;day<=n;day++){const v=dayVal(mv,id,day);const cls=v===1?'w':'o';const dow=(offset+day-1)%7;cells+=`<div class="pd ${cls}${dow>=5?' we':''}" onclick="toggleDay('${id}',${day})" title="${day} ${WDH[dow]}">${day}</div>`;}
+  for(let day=1;day<=n;day++){const dow=(offset+day-1)%7;
+    if(!isWorkDay(mv,day)){cells+=`<div class="pd off" title="${day} Вс · выходной">${day}</div>`;continue;}
+    const v=dayVal(mv,id,day);const cls=v===1?'w':'o';
+    cells+=`<div class="pd ${cls}" onclick="toggleDay('${id}',${day})" title="${day} ${WDH[dow]}">${day}</div>`;}
   const days=empDays(mv,id,n),miss=empMiss(mv,id,n).red;
-  cal.innerHTML=`<div class="pcal-hdr">${head}</div><div class="pcal">${cells}</div>
-    <div style="margin-top:10px;font-size:12.5px;color:var(--t2)">Вышел: <b style="color:var(--green)">${days}</b> дн · Не вышел: <b style="color:var(--red)">${miss}</b> дн</div>`;
+  const emp=emps.find(x=>x.id===id);const ist=emp?internStatus(emp):null;
+  const internLine=ist?(ist.done?`· <span style="color:var(--green);font-weight:700">✓ в штате</span>`:`· <span style="color:var(--orange);font-weight:700">стажёр ${ist.worked}/3 · ${fmt(ist.rate)}/д</span>`):'';
+  cal.innerHTML=`<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <button onclick="fill61('${id}')" style="padding:8px 12px;border:1px solid var(--accent);background:rgba(37,99,235,.1);color:var(--accent);border-radius:9px;font-size:12px;font-weight:800;cursor:pointer">📋 Полный месяц 6-1</button>
+      <span style="font-size:11.5px;color:var(--t3);align-self:center">затем кликните по рабочему дню, чтобы отметить невыход</span></div>
+    <div class="pcal-hdr">${head}</div><div class="pcal">${cells}</div>
+    <div style="margin-top:10px;font-size:12.5px;color:var(--t2)">Вышел: <b style="color:var(--green)">${days}</b> · Не вышел: <b style="color:var(--red)">${miss}</b> · Вс — выходной ${internLine}</div>`;
   // Суммы/аванс/расчёт — НЕ здесь, а в разделе Директор → HR (за паролём). Модалка = только календарь выходов.
   if(sm)sm.innerHTML='';if(dt)dt.innerHTML='';
 }
@@ -1802,7 +1864,7 @@ function savePayroll(){
   const {mv,n}=payMonthInfo();
   if(dirAuthed){
     const emps=empAll().filter(e=>e.status==='active');let tot=0;const d=dbGet();d.hr=d.hr||{};d.hr.payroll=Array.isArray(d.hr.payroll)?d.hr.payroll:[];
-    const recs=emps.map(e=>{const r=e.rate||0,days=empDays(mv,e.id,n),full=Math.round(r*n),miss=empMiss(mv,e.id,n).red,ded=Math.round(r*miss),adv=empAdv(mv,e.id),pay=full-ded-adv;tot+=pay;return{empId:e.id,name:e.name,days,rate:r,full,missDays:miss,deduction:ded,advance:adv,pay};});
+    const recs=emps.map(e=>{const s=empSalary(mv,e,n),adv=empAdv(mv,e.id),pay=s.fot-adv;tot+=pay;return{empId:e.id,name:e.name,days:s.work,rate:e.rate||0,full:s.fot,missDays:s.abs,deduction:0,advance:adv,pay,internDays:s.internDays};});
     d.hr.payroll=d.hr.payroll.filter(p=>p.month!==mv);
     d.hr.payroll.push({month:mv,total:tot,rows:recs,ts:new Date().toISOString()});
     dbSave(d);
@@ -2026,8 +2088,8 @@ function renderDirCockpit(){
   const revToday=te?calcFin(te).inc:0, cashToday=te?(te.income.cash||0):0;
   const now=new Date();const mvh=`${now.getFullYear()}-${pad(now.getMonth()+1)}`;const td=now.getDate();
   const emps=empAll().filter(e=>e.status==='active');
-  const workedT=emps.filter(e=>dayVal(mvh,e.id,td)===1);
-  const zpToday=workedT.reduce((s,e)=>s+(e.rate||0),0);
+  const workedT=emps.filter(e=>isWorkDay(mvh,td)&&dayVal(mvh,e.id,td)===1);
+  const zpToday=workedT.reduce((s,e)=>{const ist=internStatus(e);return s+((ist&&!ist.done)?internRateOf(e):(e.rate||0));},0);
   const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
   set('ov-rev',fmt(tR));
   const openShift=(te&&t===te.date&&new Date().getHours()<23)?' · смена открыта':'';
@@ -2330,10 +2392,10 @@ function renderDirHR(){
   const active=empAll().filter(e=>e.status==='active');
   const now=new Date();const mv=`${now.getFullYear()}-${pad(now.getMonth()+1)}`;
   const n=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
-  const fot=active.reduce((s,e)=>s+Math.round((e.rate||0)*(n-empMiss(mv,e.id,n).red)),0);   // реальный ФОТ по графику
+  const fot=active.reduce((s,e)=>s+empSalary(mv,e,n).fot,0);   // реальный ФОТ по графику 6-1 (+стажёрские)
   const td=now.getDate();   // сегодняшнее число
-  const workedToday=active.filter(e=>dayVal(mv,e.id,td)===1);   // кто вышел сегодня (по графику)
-  const todayPay=workedToday.reduce((s,e)=>s+(e.rate||0),0);    // ЗП за сегодня = Σ ставок вышедших
+  const workedToday=active.filter(e=>isWorkDay(mv,td)&&dayVal(mv,e.id,td)===1);   // кто вышел сегодня (Вс — выходной)
+  const todayPay=workedToday.reduce((s,e)=>{const ist=internStatus(e);return s+((ist&&!ist.done)?internRateOf(e):(e.rate||0));},0);   // ЗП за сегодня (стажёр — по стажёрской)
   document.getElementById('dh-cnt').textContent=active.length;
   document.getElementById('dh-pay').textContent=fmt(fot);
   document.getElementById('dh-today').textContent=fmt(todayPay);
