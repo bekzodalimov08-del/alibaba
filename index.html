@@ -2754,7 +2754,7 @@ function importDailyReports(e){
 
 
 /* CC:JS:START Call-центр обзвона. Источник правды — Supabase mkt_leads (не CSV). */
-let CC_LEADS=[], CC_TODAY=[], CC_PRIO='all', CC_STAT='todo', CC_CUR=null;
+let CC_LEADS=[], CC_TODAY=[], CC_PRIO='all', CC_STAT='todo', CC_CUR=null, CC_SAVING=false;
 
 // Подписи — узбекская латиница, согласованы с sales. Не менять без её ответа.
 const CC_OUTCOMES=[
@@ -2890,11 +2890,15 @@ function ccSheet(title,html){
 function ccClose(){document.getElementById('cc-modal').classList.remove('on');CC_CUR=null}
 
 async function ccSave(reason,callbackAt){
-  if(!CC_CUR)return;
+  if(!CC_CUR||CC_SAVING)return;   // защита от двойного клика (первый клик уже сохраняет)
+  CC_SAVING=true;
   const {id,outcome}=CC_CUR;
   const lead=CC_LEADS.find(l=>l.id===id)||{};
   const noteEl=document.getElementById('cc-note');
   const note=noteEl?noteEl.value:null;
+  // мгновенный отклик: гасим карточку и блокируем её кнопки, пока идёт сохранение
+  const _card=document.getElementById('cc-'+id);
+  if(_card){_card.style.opacity='.45';_card.style.pointerEvents='none';_card.querySelectorAll('.cc-b').forEach(b=>b.disabled=true);}
   ccClose();
   try{
     if(typeof authEnsure==='function')await authEnsure();
@@ -2911,9 +2915,12 @@ async function ccSave(reason,callbackAt){
     if(outcome==='tasting')patch.next_step='Degustatsiya / дегустация согласована';
     await fetch(`${SUPA_URL}/rest/v1/mkt_leads?id=eq.${id}`,{method:'PATCH',headers:h,body:JSON.stringify(patch)});
   }catch(e){
+    CC_SAVING=false;
+    if(_card){_card.style.opacity='';_card.style.pointerEvents='';_card.querySelectorAll('.cc-b').forEach(b=>b.disabled=false);}
     alert('Не сохранилось — проверьте интернет и повторите.');
     return;
   }
+  CC_SAVING=false;
   ccLoad();
 }
 /* CC:JS:END */
